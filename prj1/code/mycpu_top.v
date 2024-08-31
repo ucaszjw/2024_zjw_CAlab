@@ -151,7 +151,6 @@ assign rd   = inst[ 4: 0];
 assign rj   = inst[ 9: 5];
 assign rk   = inst[14:10];
 
-assign i5   = inst[14:10];
 assign i12  = inst[21:10];
 assign i20  = inst[24: 5];
 assign i16  = inst[25:10];
@@ -206,8 +205,8 @@ assign src2_is_4  =  inst_jirl | inst_bl;
 
 assign imm = src2_is_4 ? 32'h4                      :
              need_si20 ? {i20[19:0], 12'b0}         :
-             need_si12 ? {{20{i12[11]}}, i12[11:0]} :
-                         {{27'b0},i5[4:0]}; 
+                         {{20{i12[11]}}, i12[11:0]} ;
+
 
 assign br_offs = need_si26 ? {{ 4{i26[25]}}, i26[25:0], 2'b0} :
                              {{14{i16[15]}}, i16[15:0], 2'b0} ;
