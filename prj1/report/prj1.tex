@@ -357,9 +357,9 @@
         assign debug_alu_result = alu_result;
     \end{lstlisting}
 
-    当然，testbench中也需要添加这些信号，过程与之类似，这里不再赘述。
+    当然，testbench中也需要添加这些信号，过程与之类似，这里不再赘述。（注：查看指令更方便的办法是直接查看反汇编文件，找到对应pc值的指令即可）
 
-    这个错误就出现在指令BL上。在LoongArch手册中，BL指令为无条件转移指令，pc直接加上偏移量，并将该指令的pc值加4的结果写入到1号通用寄存器r1中。原代码中对寄存器写使能的赋值如下：
+    这个错误就出现在指令BL上。在LoongArch手册中，BL指令为无条件转移指令，pc直接加上偏移量，并将该指令的pc值加4的结果写入到1号通用寄存器r1中。最开始的时候，我以为是分支条件的问题，查了又查，没发现问题，后来仔细阅读了手册才明白原因。原代码中对寄存器写使能的赋值如下：
 
     \begin{lstlisting}[language=Verilog]
         assign gr_we = ~inst_st_w & ~inst_beq & ~inst_bne & ~inst_b & ~inst_bl;
@@ -383,34 +383,9 @@
     
     出错位置对应指令为BL指令。
 
-    \item 立即数错误。
-    
-    不出意外，仿真又碰到了错误，这次出错的指令是SLLI指令。在LoongArch手册中，SLLI.W指令为逻辑左移指令，将通用寄存器rj中的数据逻辑左移ui5位，移位结果写入通用寄存器rd中。原代码中我们看到：
-
-    \begin{lstlisting}[language=Verilog]
-        assign need_ui5   =  inst_slli_w | inst_srli_w | inst_srai_w;
-        assign imm = src2_is_4 ? 32'h4                      :
-                     need_si20 ? {i20[19:0], 12'b0}         :
-        /*need_ui5 || need_si12*/{{20{i12[11]}}, i12[11:0]} ;
-    \end{lstlisting}
-
-    代码中贴心地给出了注释，\texttt{need\_ui5}为真时，应当采取最后一种情况，但是这赋值和ui5又有什么关系？这显然是错误的。我添加了i5的声明与赋值，也多加了一个判断条件，将其改为：
-
-    \begin{lstlisting}[language=Verilog]
-        wire [ 4:0] i5;
-        assign i5   = inst[14:10];
-
-        assign imm = src2_is_4 ? 32'h4                      :
-                     need_si20 ? {i20[19:0], 12'b0}         :
-                     need_si12 ? {{20{i12[11]}}, i12[11:0]} :
-                                 {{27'b0},i5[4:0]}; 
-    \end{lstlisting}
-
-    问题得到解决。
-
     \item ALU内部逻辑错误。
     
-    问题还没有得到解决，移位得到的结果仍然是错误的，错误就只能出在ALU模块中了。在ALU内部，逻辑左移指令的实现如下：
+    问题还没有得到解决，下一个出错的指令是SLLI.W，移位得到的结果是错误的，既然ALU的接线没有问题，错误就只能出在ALU模块中了。在ALU内部，逻辑左移指令的实现如下：
 
     \begin{lstlisting}[language=Verilog]
         assign sll_result = alu_src2 << alu_src1[4:0];   //rj << i5
@@ -439,6 +414,18 @@
 
     \begin{lstlisting}[language=Verilog]
         assign sr64_result = {{32{op_sra & alu_src1[31]}}, alu_src1[31:0]} >> alu_src2[4:0]; //rj >> i5
+    \end{lstlisting}
+
+    接下来是OR指令，错误依然在ALU模块中，原代码中的逻辑如下：
+
+    \begin{lstlisting}[language=Verilog]
+        assign or_result = alu_src1 | alu_src2 | alu_result;
+    \end{lstlisting}
+
+    但是根据手册，OR指令应当是将rj和rk的值进行或运算，因此应当改为：
+
+    \begin{lstlisting}[language=Verilog]
+        assign or_result = alu_src1 | alu_src2;
     \end{lstlisting}
 
     至此，所有错误均已解决。
